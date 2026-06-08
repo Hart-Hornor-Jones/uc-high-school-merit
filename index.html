@@ -139,7 +139,7 @@
       <label class="chk"><input type="checkbox" id="dropout" /> <span>Drop (1.5&times;IQR)</span></label>
     </div>
     <div class="ctl" style="flex:1;min-width:200px;"><label for="search">Search for a high school</label>
-      <input type="text" id="search" list="schoollist" placeholder="e.g. Berkeley High, University Irvine&hellip;" />
+      <input type="text" id="search" list="schoollist" placeholder="e.g. Berkeley High, University High &mdash; Irvine&hellip;" />
       <datalist id="schoollist"></datalist>
     </div>
   </div>
@@ -428,8 +428,16 @@
       fill($('metricA'),ALL_KEYS,state.stripMetric);
     }
   }
-  function rebuildDatalist(){ const dl=$('schoollist'); dl.innerHTML=''; const seen=new Set();
-    schools().forEach(s=>{ if(s.name&&!seen.has(s.name)){ seen.add(s.name); const o=document.createElement('option'); o.value=s.name; dl.appendChild(o);} }); }
+  const searchIndex = new Map();                       // disambiguated label -> school (rebuilt per campus/period)
+  function schoolLabel(s){ const city=(s.city&&s.city.trim())?s.city.trim():'—'; return s.name+' — '+city; }
+  function rebuildDatalist(){ const dl=$('schoollist'); dl.innerHTML=''; searchIndex.clear();
+    const list=schools().filter(s=>s.name).slice()
+      .sort((a,b)=> a.name<b.name?-1 : a.name>b.name?1 : (a.city||'').localeCompare(b.city||''));
+    const base=new Map(); list.forEach(s=>{ const b=schoolLabel(s); base.set(b,(base.get(b)||0)+1); });
+    list.forEach(s=>{ let label=schoolLabel(s);
+      if(base.get(label)>1 || searchIndex.has(label)) label+=' (CEEB '+s.ceeb+')';   // same name+city -> add CEEB
+      searchIndex.set(label,s);
+      const o=document.createElement('option'); o.value=label; dl.appendChild(o); }); }
 
   function dims(){ const w=Math.max(360,document.querySelector('.chartcard').clientWidth-16); return {w,h:520,m:{top:14,right:18,bottom:48,left:60}}; }
   function periodLabel(){ return periodByKey[state.period].label; }
@@ -671,9 +679,13 @@
     sv.append('text').attr('x',x(last[0])).attr('y',y(last[1])-6).attr('text-anchor','end').attr('font-size',10).attr('fill','#555').text(fmtVal(last[1],yk));
   }
 
-  function onSearch(){ state.query=$('search').value;
-    const ex=schools().find(s=>s.name&&s.name.toLowerCase()===state.query.trim().toLowerCase());
-    if(ex) select(ex); else render(); }
+  function onSearch(){ const raw=$('search').value; state.query=raw;
+    let s=searchIndex.get(raw.trim());                                   // exact pick from the (disambiguated) list
+    if(!s){ const q=raw.trim().toLowerCase();
+      const hits=schools().filter(x=>x.name&&x.name.toLowerCase()===q);
+      if(hits.length===1) s=hits[0]; }                                   // unique bare name typed -> resolve it
+    if(s){ state.query=s.name; select(s); }                              // ambiguous bare name -> fall through & highlight
+    else render(); }
 
   $('campus').onchange=()=>{ state.campus=+$('campus').value; state.sel=null; state.query=''; $('search').value='';
     $('profile').innerHTML='<div class="empty">Click a dot (or search a school) to see its full profile.</div>'; rebuildDatalist(); render(); };
