@@ -5,7 +5,7 @@ extract_dv_all9.py  -  per-school x campus x year admissions funnel, all 9 campu
 Reads the consolidated UC Information Center "by source school" dump
 (admissions_source_school_consolidated_lean/, ~558 MB, NOT committed) and writes a
 compact long file: one row per (CEEB, campus, year) with applicants/admits/enrollees
-(+ admitted-GPA where reported). This is the only step that needs the large raw source;
+(+ applicant/admit/enrollee GPA where reported). This is the only step that needs the large raw source;
 its output (data/dv_admissions_all9.csv) IS committed, so the rest of the pipeline runs
 without the raw files.
 
@@ -75,11 +75,11 @@ for k, sc in counts.items():
     ceeb, campus, year = k; nm, city, county = meta[k]; g = gpaval.get(k, {})
     out.append([ceeb, campus, year,
                 int(sc.get("applicants", 0)) or "", int(sc.get("admits", 0)) or "", int(sc.get("enrollees", 0)) or "",
-                g.get("admits", ""), nm, city, county])
+                g.get("applicants", ""), g.get("admits", ""), g.get("enrollees", ""), nm, city, county])
 out.sort(key=lambda r: (r[1], r[2], r[0]))
 with open(OUT, "w", newline="") as f:
     w = csv.writer(f)
-    w.writerow(["ceeb","campus","year","applicants","admits","enrollees","adm_gpa","school_name","city","county"])
+    w.writerow(["ceeb","campus","year","applicants","admits","enrollees","app_gpa","adm_gpa","enr_gpa","school_name","city","county"])
     w.writerows(out)
 
 from collections import Counter

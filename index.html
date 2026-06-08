@@ -242,6 +242,14 @@
           These exist only for ~2006&ndash;2020 (none after 2020), are enrollee&ndash;only, small, self&ndash;selected
           samples &mdash; context, never a merit axis. SAT &ldquo;writing&rdquo; appears only on its old 200&ndash;800
           section scale, as the post&ndash;2016 essay is not comparable.</li>
+        <li><b>Applicant &amp; admit GPA.</b> The two GPA axes are UC's own recalculated <i>weighted, honors&ndash;capped</i>
+          high&ndash;school GPA (sophomore&ndash;junior A&ndash;G coursework &mdash; the figure UC uses in admissions),
+          averaged over the selected period. <b>Applicant GPA</b> gauges the strength of a school's UC applicant pool: an
+          applicant&ndash;specific merit axis, distinct from CAASPP (which covers all grade&ndash;11 students). <b>Admit GPA</b>
+          is the average among <i>admitted</i> students &mdash; the GPA bar UC actually accepted &mdash; and is partly
+          downstream of the admit decision (a more selective campus shows a higher bar), so read it as a level UC set, not a
+          pure measure of school strength. A profile also shows enrollee GPA and the <b>admit&minus;applicant gap</b> (how far
+          above the pool the admitted students sat). Admit GPA is blank wherever UC suppresses a school's admits.</li>
       </ul>
     </div>
   </details>
@@ -259,8 +267,8 @@
     '<p style="color:#b00">Could not load <code>data.js</code>. If you opened this file directly, '+
     'serve the folder over HTTP (e.g. <code>python3 -m http.server</code>) or view it on GitHub Pages.</p>'; return; }
 
-  // panel row layout: [year,A,D,E,C,Gc,H,ela,math,upp,Gp]
-  const IX = {year:0,A:1,D:2,E:3,C:4,G:5,H:6,ela:7,math:8,upp:9,Gp:10};
+  // panel row layout: [year,A,D,E,C,Gc,H,ela,math,upp,Gp,agpa,dgpa,egpa]
+  const IX = {year:0,A:1,D:2,E:3,C:4,G:5,H:6,ela:7,math:8,upp:9,Gp:10,agpa:11,dgpa:12,egpa:13};
   const METRICS = D.metrics, MByKey = Object.fromEntries(METRICS.map(m=>[m.key,m]));
   const X_KEYS = METRICS.filter(m=>m.role==='merit'||m.role==='context').map(m=>m.key);
   const Y_KEYS = METRICS.filter(m=>m.role==='outcome').map(m=>m.key);
@@ -299,6 +307,8 @@
     if(key==='ela')  return meanIdx(rows,IX.ela);
     if(key==='math') return meanIdx(rows,IX.math);
     if(key==='upp')  return meanIdx(rows,IX.upp);
+    if(key==='app_gpa') return meanIdx(rows,IX.agpa);
+    if(key==='adm_gpa') return meanIdx(rows,IX.dgpa);
     if(m.num&&m.den){ const s=jsum(rows,m.num,m.den); if(!s) return null; return m.fmt==='pct'?100*s.sn/s.sd:s.sn/s.sd; }
     return null;
   }
@@ -324,7 +334,7 @@
     return `<tr${ri.reliable?'':' class="lowconf"'}><td class="k">${m.label}`+
       `<div class="rbasis">${basis}${note}</div></td><td class="v">${fmtVal(ri.val,k)}</td></tr>`; }
   function fmtVal(v,key){ if(v==null) return '—'; const m=MByKey[key];
-    return m.fmt==='pct'? v.toFixed(1)+'%' : v.toFixed(3); }
+    return m.fmt==='pct'? v.toFixed(1)+'%' : (m.fmt==='gpa'? v.toFixed(2) : v.toFixed(3)); }
 
   // ---------- denominators, dot-size basis, central tendency, outliers, zoom ----------
   const DEN_IDX={A:IX.A,D:IX.D,E:IX.E,Gp:IX.Gp,H:IX.H,C:IX.C};
@@ -605,6 +615,9 @@
     const p=$('profile');
     const row=(k,lbl)=>`<tr><td class="k">${lbl||MByKey[k].label}</td><td class="v">${fmtVal(valOf(s,k),k)}</td></tr>`;
     const cnt=idx=>{ const v=sumIdx(s.rows,idx); return v==null?'—':fmtN(v); };
+    const _ag=valOf(s,'app_gpa'), _dg=valOf(s,'adm_gpa'), _eg=meanIdx(s.rows,IX.egpa);
+    const gapTxt=(_ag!=null&&_dg!=null)?((_dg-_ag>=0?'+':'')+(_dg-_ag).toFixed(2)):'—';
+    const egTxt=(_eg==null?'—':_eg.toFixed(2));
     // SAT/ACT: enrollee averages, latest available year (pre-2021 only). SAT reading is a clean 200–800
     // EBRW score; SAT "writing" is shown only on its old 200–800 section scale (the post-2016 essay scale
     // is not comparable); ACT is the 1–36 figure for writing-section takers.
@@ -629,6 +642,10 @@
       `<tr><td class="k">Graduating cohort <span class="rcap">(A–G completion base)</span></td><td class="v">${cnt(IX.C)}</td></tr>`+
       `<tr class="sec"><td>Outcome rates <span class="rcap">numerator ÷ denominator over years both are reported</span></td><td class="v"></td></tr>`+
       rateRow(s,'admit_rate')+rateRow(s,'yield')+rateRow(s,'app_rate')+rateRow(s,'adm_per_elig')+rateRow(s,'enr_per_elig')+rateRow(s,'app_per_head')+rateRow(s,'adm_per_head')+rateRow(s,'enr_per_head')+
+      `<tr class="sec"><td>Applicant &amp; admit GPA <span class="rcap">UC weighted-capped, mean over period</span></td><td class="v"></td></tr>`+
+      row('app_gpa','Applicant GPA')+row('adm_gpa','Admit GPA')+
+      `<tr><td class="k">Enrollee GPA</td><td class="v">${egTxt}</td></tr>`+
+      `<tr><td class="k">Admit − applicant gap <span class="rcap">how far UC reached vs the pool</span></td><td class="v">${gapTxt}</td></tr>`+
       `<tr class="sec"><td>Academic / context</td><td class="v"></td></tr>`+
       row('avg')+row('ela')+row('math')+rateRow(s,'ag')+row('upp')+
       `<tr><td class="k">ELWR met at entry — no remediation (enrollees)<div class="rbasis">met via AWPE exam or AP/IB/SAT/ACT/transferable course; not “ever met”</div></td><td class="v">${awpeVal}</td></tr>`+

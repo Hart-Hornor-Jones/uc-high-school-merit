@@ -37,7 +37,7 @@ def agk(y): y = int(y); return f"{y-1}-{str(y)[2:]}"
 def cuk(y): y = int(y); return f"{y-1}-{y}"
 
 cols = ["ceeb","cds14","campus","year","school_name","city","county",
-        "applicants","admits","enrollees","admit_rate","adm_gpa",
+        "applicants","admits","enrollees","admit_rate","app_gpa","adm_gpa","enr_gpa",
         "ela_pct_met","math_pct_met","avg_pct_met",
         "ag_cohort","ag_met_uccsu_count","enroll_9_12","upp_pct","lcff_plus",
         "match_method","match_score"]
@@ -57,7 +57,7 @@ for r in csv.DictReader(open(os.path.join(DATA, "dv_admissions_all9.csv"))):
     upp = f(U["upp_pct"]) if U else None; en912 = U["enroll_9_12"] if U else ""; lcff = U["lcff_plus_flag"] if U else ""
     rows.append([ce, cds, r["campus"], yr, r["school_name"], r["city"], r["county"],
         int(app) if app else "", int(adm) if adm is not None else "", int(enr) if enr is not None else "",
-        rate, r.get("adm_gpa",""),
+        rate, r.get("app_gpa",""), r.get("adm_gpa",""), r.get("enr_gpa",""),
         ela if ela is not None else "", math if math is not None else "", avg if avg is not None else "",
         int(agc) if agc else "", int(agm) if agm else "", en912, upp if upp is not None else "", lcff, mm, ms])
 

@@ -32,6 +32,7 @@ def fnum(x):
 def inum(x):
     v = fnum(x); return None if v is None else int(round(v))
 def r1(x): return None if x is None else round(x, 1)
+def g2(x): x = fnum(x); return None if x is None else round(x, 2)   # GPA: parse + 2 decimals
 def ceeb6(x):
     x = str(x or "").strip(); return x.zfill(6) if x.isdigit() else x
 
@@ -77,7 +78,7 @@ def clean_G(cds, yr, raw_G):
     if action == "FLOOR": return raw_G, None
     return raw_G, raw_G
 
-# ---- panel: (campusIdx|ceeb) -> [[year,A,D,E,C,Gc,H,ela,math,upp,Gp], ...] ----
+# ---- panel: (campusIdx|ceeb) -> [[year,A,D,E,C,Gc,H,ela,math,upp,Gp,agpa,dgpa,egpa], ...] ----
 panel = defaultdict(list)
 meta = {}              # ceeb -> [name, city, county, cds] (latest year wins)
 meta_year = {}
@@ -90,11 +91,12 @@ for r in csv.DictReader(open(os.path.join(DATA, "panel_all9_by_year.csv"), encod
     A = inum(r["applicants"]); D = inum(r["admits"]); E = inum(r["enrollees"])
     C = inum(r["ag_cohort"]); G = inum(r["ag_met_uccsu_count"]); H = inum(r["enroll_9_12"])
     ela = r1(fnum(r["ela_pct_met"])); math = r1(fnum(r["math_pct_met"])); upp = r1(fnum(r["upp_pct"]))
+    agpa = g2(r.get("app_gpa")); dgpa = g2(r.get("adm_gpa")); egpa = g2(r.get("enr_gpa"))
     # skip totally empty rows (no funnel and no covariate)
     if A is None and D is None and E is None and ela is None and upp is None and G is None:
         continue
     Gc, Gp = clean_G(r["cds14"], yr, G)   # A-G eligible: cleaned for completion (Gc) and per-eligible rates (Gp)
-    panel[f"{CIDX[camp]}|{ce}"].append([yr, A, D, E, C, Gc, H, ela, math, upp, Gp])
+    panel[f"{CIDX[camp]}|{ce}"].append([yr, A, D, E, C, Gc, H, ela, math, upp, Gp, agpa, dgpa, egpa])
     if ce not in meta_year or yr >= meta_year[ce]:
         meta[ce] = [r["school_name"], r["city"], r["county"], r["cds14"]]; meta_year[ce] = yr
 for k in panel: panel[k].sort()
@@ -110,6 +112,10 @@ METRICS = [
   {"key":"upp",  "label":"Poverty / high-need — UPP %", "short":"UPP (poverty)", "role":"context", "fmt":"pct"},
   {"key":"awpe", "label":"Writing req. met — ELWR/AWPE (enrollees)", "short":"ELWR/AWPE", "role":"context", "fmt":"pct",
                  "caveat":"UC enrollees only (self-selected, small N); latest year available per school."},
+  {"key":"app_gpa","label":"Applicant GPA — UC weighted-capped (gr 10–11)","short":"Applicant GPA","role":"merit","fmt":"gpa",
+                 "caveat":"Mean UC-recalculated GPA of the school's UC freshman APPLICANTS (weighted, honors-capped). An applicant-pool merit measure — distinct from CAASPP, which covers all grade-11 students."},
+  {"key":"adm_gpa","label":"Admit GPA — UC weighted-capped (admitted students)","short":"Admit GPA","role":"merit","fmt":"gpa",
+                 "caveat":"Mean GPA of ADMITTED students. Partly downstream of the admit decision (a more selective campus shows a higher bar), so read it as the GPA level UC accepted at the school, not a pure measure of school strength."},
   # outcome rates (selectable Y-axis); computed period-consistently as ratio-of-sums
   {"key":"admit_rate","label":"Admit rate to this campus (admits ÷ applicants)",        "short":"Admit rate",        "role":"outcome","fmt":"ratio","num":"D","den":"A"},
   {"key":"yield",     "label":"Enrollment yield (enrollees ÷ admits)",      "short":"Yield (enroll÷adm)","role":"outcome","fmt":"ratio","num":"E","den":"D"},
@@ -169,7 +175,7 @@ cols = ["campus","ceeb","cds14","school_name","city","county","applicants","admi
         "admit_rate","yield","application_rate","admits_per_eligible","enr_per_eligible",
         "apps_per_enrollment","admits_per_enrollment","enr_per_enrollment",
         "caaspp_ela_pct_met","caaspp_math_pct_met","caaspp_avg_pct_met","ag_completion_pct",
-        "upp_pct","lcff_plus","awpe_writing_met_pct","awpe_year"]
+        "upp_pct","lcff_plus","awpe_writing_met_pct","awpe_year","applicant_gpa","admit_gpa"]
 out = []
 for key, allrows in panel.items():
     ci, ce = key.split("|"); ci = int(ci)
@@ -183,13 +189,15 @@ for key, allrows in panel.items():
     snG, sdC = jsum(rows, "G", "C"); agpct = round(100*snG/sdC,2) if snG is not None else None
     nm, city, cty, cds = meta.get(ce, ["","","",""])
     aw = awpe.get(ce, [None, None])
+    agpa_m = meanof(rows, 11); dgpa_m = meanof(rows, 12)
     out.append([CAMPUSES[ci], ce, cds, nm, city, cty, sumA, sumD, sumE,
         rate(rows,"D","A",True), rate(rows,"E","D",True), rate(rows,"A","Gp",False),
         rate(rows,"D","Gp",False), rate(rows,"E","Gp",False), rate(rows,"A","H",False),
         rate(rows,"D","H",False), rate(rows,"E","H",False),
         round(ela,1) if ela is not None else None, round(math,1) if math is not None else None, avg, agpct,
         round(upp,1) if upp is not None else None,
-        "Y" if (upp is not None and upp >= 75) else "N", aw[0], aw[1]])
+        "Y" if (upp is not None and upp >= 75) else "N", aw[0], aw[1],
+        round(agpa_m,2) if agpa_m is not None else None, round(dgpa_m,2) if dgpa_m is not None else None])
 out.sort(key=lambda r: (r[0], -(r[6] or 0)))
 with open(os.path.join(DATA, "cross_section_all9.csv"), "w", newline="", encoding="utf-8") as fh:
     w = csv.writer(fh); w.writerow(cols); w.writerows(out)
