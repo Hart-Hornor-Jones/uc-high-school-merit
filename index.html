@@ -684,7 +684,7 @@
     if(!s){ const q=raw.trim().toLowerCase();
       const hits=schools().filter(x=>x.name&&x.name.toLowerCase()===q);
       if(hits.length===1) s=hits[0]; }                                   // unique bare name typed -> resolve it
-    if(s){ state.query=''; select(s); svg.selectAll('circle.dot').classed('dim',false).classed('match',false); }  // exact pick -> emphasize only the chosen dot
+    if(s){ state.query=''; select(s); render(); }  // exact pick -> render() re-applies the single sel highlight (survives the chart rebuild)
     // (partial/ambiguous text falls through to render(), which name-highlights all matches as you type)
     else render(); }
 
