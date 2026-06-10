@@ -78,6 +78,25 @@ def clean_G(cds, yr, raw_G):
     if action == "FLOOR": return raw_G, None
     return raw_G, raw_G
 
+# ---- UC freshman graduation rates by source high school (UC Info Center dashboard) ----
+# data/grad_rates_by_hs.csv (built by build/parse_grad_rates.py): per (campus, ceeb, entry year),
+# the school's UC freshman entrants that fall (cohort_n, shown only when >=10) and their
+# 1st-year retention / 4-, 5-, 6-year graduation rates (integer percents).
+# "All" rows pool all UC campuses (the well-covered series); campus rows are big feeders only.
+# Maturity: 6-yr rates exist through entry 2019, 5-yr 2020, 4-yr 2021, retention 2024.
+grad  = defaultdict(list)   # ceeb        -> [[entry_year, N, ret1, g4, g5, g6], ...]
+gradC = defaultdict(list)   # "ci|ceeb"   -> same rows, entrants to that campus only
+_gr = os.path.join(DATA, "grad_rates_by_hs.csv")
+if os.path.exists(_gr):
+    for r in csv.DictReader(open(_gr, encoding="utf-8")):
+        row = [inum(r["entry_year"]), inum(r["cohort_n"]), inum(r["ret1_pct"]),
+               inum(r["grad4_pct"]), inum(r["grad5_pct"]), inum(r["grad6_pct"])]
+        ce = ceeb6(r["ceeb"])
+        if r["campus"] == "All": grad[ce].append(row)
+        elif r["campus"] in CIDX: gradC[f"{CIDX[r['campus']]}|{ce}"].append(row)
+    for k in grad: grad[k].sort()
+    for k in gradC: gradC[k].sort()
+
 # ---- panel: (campusIdx|ceeb) -> [[year,A,D,E,C,Gc,H,ela,math,upp,Gp,agpa,dgpa,egpa], ...] ----
 panel = defaultdict(list)
 meta = {}              # ceeb -> [name, city, county, cds] (latest year wins)
@@ -116,7 +135,15 @@ METRICS = [
                  "caveat":"Mean UC-recalculated GPA of the school's UC freshman APPLICANTS (weighted, honors-capped). An applicant-pool merit measure — distinct from CAASPP, which covers all grade-11 students."},
   {"key":"adm_gpa","label":"Admit GPA — UC weighted-capped (admitted students)","short":"Admit GPA","role":"merit","fmt":"gpa",
                  "caveat":"Mean GPA of ADMITTED students. Partly downstream of the admit decision (a more selective campus shows a higher bar), so read it as the GPA level UC accepted at the school, not a pure measure of school strength."},
+  {"key":"grad6_prior","label":"UC 6-yr graduation — earlier entrants (cohorts 6–10 yrs before period)","short":"UC 6-yr grad (prior cohorts)","role":"merit","fmt":"pct","grad":{"col":"g6","win":"prior"},
+                 "caveat":"N-weighted 6-yr UC graduation rate of the school's earlier UC entrants (entry cohorts 6-10 years before the selected period starts) - the most recent rates fully observable, and knowable to admissions readers, by decision time. All-UC-campus rates; cohorts shown only when >=10 entrants."},
   # outcome rates (selectable Y-axis); computed period-consistently as ratio-of-sums
+  {"key":"ret1_same","label":"UC 1st-year retention — this period's entrants","short":"UC 1st-yr retention","role":"outcome","fmt":"pct","grad":{"col":"r1","win":"same"},
+                 "caveat":"Share of the school's UC freshman entrants in the selected period still enrolled after one year (available through entry 2024)."},
+  {"key":"grad4_same","label":"UC 4-yr graduation — this period's entrants","short":"UC 4-yr grad","role":"outcome","fmt":"pct","grad":{"col":"g4","win":"same"},
+                 "caveat":"4-year UC graduation rate of entrants in the selected period; mature only through entry 2021 (empty for recent periods - try 2016-2019)."},
+  {"key":"grad6_same","label":"UC 6-yr graduation — this period's entrants","short":"UC 6-yr grad","role":"outcome","fmt":"pct","grad":{"col":"g6","win":"same"},
+                 "caveat":"6-year UC graduation rate of entrants in the selected period; mature only through entry 2019 (empty for recent periods - try 2016-2019)."},
   {"key":"admit_rate","label":"Admit rate to this campus (admits ÷ applicants)",        "short":"Admit rate",        "role":"outcome","fmt":"ratio","num":"D","den":"A"},
   {"key":"yield",     "label":"Enrollment yield (enrollees ÷ admits)",      "short":"Yield (enroll÷adm)","role":"outcome","fmt":"ratio","num":"E","den":"D"},
   {"key":"app_rate",  "label":"Application rate (applicants ÷ A–G eligible)","short":"Application rate",  "role":"outcome","fmt":"ratio","num":"A","den":"Gp"},
@@ -143,6 +170,8 @@ UCDATA = {
   "awpe": awpe,
   "tests": tests,
   "panel": panel,
+  "grad": grad,
+  "gradC": gradC,
   "metrics": METRICS,
   "periods": PERIODS,
   "defaultPeriod": DEFAULT_PERIOD,
@@ -170,12 +199,22 @@ def rate(rows, num, den, pct):
     if sn is None: return None
     return round(100*sn/sd, 2) if pct else round(sn/sd, 4)
 
+GRIX = {"r1":2,"g4":3,"g5":4,"g6":5}
+def grad_pool(ce, col, years):
+    """N-weighted pooled grad/retention percent over the given entry years (All-UC rows)."""
+    sv = sw = 0
+    for row in grad.get(ce, []):
+        if row[0] in years and row[GRIX[col]] is not None and row[1]:
+            sv += row[GRIX[col]] * row[1]; sw += row[1]
+    return (round(sv / sw, 1), sw) if sw else (None, None)
+
 dp = next(p for p in PERIODS if p["key"] == DEFAULT_PERIOD)["years"]
 cols = ["campus","ceeb","cds14","school_name","city","county","applicants","admits","enrollees",
         "admit_rate","yield","application_rate","admits_per_eligible","enr_per_eligible",
         "apps_per_enrollment","admits_per_enrollment","enr_per_enrollment",
         "caaspp_ela_pct_met","caaspp_math_pct_met","caaspp_avg_pct_met","ag_completion_pct",
-        "upp_pct","lcff_plus","awpe_writing_met_pct","awpe_year","applicant_gpa","admit_gpa"]
+        "upp_pct","lcff_plus","awpe_writing_met_pct","awpe_year","applicant_gpa","admit_gpa",
+        "uc_grad6_prior_pct","uc_grad6_prior_n","uc_ret1_same_pct","uc_ret1_same_n"]
 out = []
 for key, allrows in panel.items():
     ci, ce = key.split("|"); ci = int(ci)
@@ -197,7 +236,8 @@ for key, allrows in panel.items():
         round(ela,1) if ela is not None else None, round(math,1) if math is not None else None, avg, agpct,
         round(upp,1) if upp is not None else None,
         "Y" if (upp is not None and upp >= 75) else "N", aw[0], aw[1],
-        round(agpa_m,2) if agpa_m is not None else None, round(dgpa_m,2) if dgpa_m is not None else None])
+        round(agpa_m,2) if agpa_m is not None else None, round(dgpa_m,2) if dgpa_m is not None else None,
+        *grad_pool(ce, "g6", set(range(min(dp)-10, min(dp)-5))), *grad_pool(ce, "r1", set(dp))])
 out.sort(key=lambda r: (r[0], -(r[6] or 0)))
 with open(os.path.join(DATA, "cross_section_all9.csv"), "w", newline="", encoding="utf-8") as fh:
     w = csv.writer(fh); w.writerow(cols); w.writerows(out)
@@ -207,6 +247,7 @@ size = os.path.getsize(os.path.join(REPO, "data.js"))
 print(f"panel keys (campus×school): {len(panel)}")
 print(f"school meta (unique CEEB)  : {len(meta)}")
 print(f"AWPE schools               : {len(awpe)}")
+print(f"grad-rate schools (All-UC) : {len(grad)} | campus-specific keys: {len(gradC)}")
 print(f"data.js                    : {size/1024/1024:.2f} MB")
 print(f"cross_section_all9 rows     : {len(out)} (default period {dp})")
 yrs = sorted({row[0] for rows in panel.values() for row in rows})

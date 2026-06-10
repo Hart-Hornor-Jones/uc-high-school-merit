@@ -140,6 +140,8 @@ compact **derived** datasets are included, under `data/`.
 
 - **UC Information Center** — admissions by source high school (the dependent variable).
   https://www.universityofcalifornia.edu/about-us/information-center
+- **UC Information Center — freshman outcomes dashboard** — retention & 4-/5-/6-yr graduation rates
+  by source high school (entry cohorts 1999–2024), the basis of the UC-graduation metrics.
 - **UC Accountability Report** — systemwide context.
   https://accountability.universityofcalifornia.edu/2025/report.html
 - **CDE CAASPP / ELPAC research files** — grade-11 proficiency.
@@ -168,6 +170,12 @@ python3 scripts/make_site_data.py       # panel                → data.js (+ cr
 
 ```bash
 python3 build/extract_dv_all9.py /path/to/admissions_source_school_consolidated_lean
+```
+
+**Re-parse the UC graduation-rate dashboard crosstabs** (→ `data/grad_rates_by_hs.csv`):
+
+```bash
+python3 build/parse_grad_rates.py /path/to/ug_outcomes_freshman_grad_rates_by_hs_internal_control
 ```
 
 **Rebuild the curated covariates from raw public downloads:** follow [`build/README.md`](build/README.md).
