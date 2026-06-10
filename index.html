@@ -290,7 +290,13 @@
           year by year. (2)&nbsp;as an <i>outcome</i> &mdash; the retention/graduation rates of the period's own
           entrants (e.g. vs CAASPP: does school-level merit predict success after enrollment?). The
           same-period rates are also offered on the X-axis: though measured after admission, a cohort's
-          eventual completion can be read as an indicator of merit already present when it applied. Dot size for
+          eventual completion can be read as an indicator of merit already present when it applied.
+          <b>Scope:</b> all grad metrics pool the school's entrants to <i>any</i> UC campus (the
+          per-campus dashboard series exists only for big feeders), so on a campus view a school can
+          carry a retention/graduation rate even when its admits or enrollees <i>to that campus</i> are
+          zero or suppressed &mdash; the grad rate describes the school's UC-going students; the funnel
+          describes this campus. Profiles show the any-campus entrant count behind the rate, and funnel
+          counts suppressed in every year display as &ldquo;&mdash;&rdquo; rather than a false 0. Dot size for
           grad metrics is the entrant-cohort N. Campus filter does not change the All-UC grad series; a
           profile additionally shows the campus-specific 6-yr rate where reported.</li>
       </ul>
@@ -365,7 +371,7 @@
   // window note for titles ("UC grad cohorts: entered 2013–2017")
   function gradNote(){ for(const k of arguments){ const m=MByKey[k];
     if(m&&m.grad){ const ys=gradWinYears(m.grad.win);
-      return 'UC grad cohorts: entered '+Math.min(...ys)+'\u2013'+Math.max(...ys); } } return null; }
+      return 'UC grad cohorts: entered '+Math.min(...ys)+'\u2013'+Math.max(...ys)+' (entrants to any UC campus)'; } } return null; }
 
   function valOf(school, key){
     const m=MByKey[key], rows=school.rows;
@@ -524,6 +530,13 @@
   function periodLabel(){ return periodByKey[state.period].label; }
 
   function render(){ rebuildMetricSelects(); state.view==='scatter'?renderScatter():renderStrip(); renderStats(); renderLegend(); }
+  // empty-state message, word-wrapped to the frame (a single <text> clips at the svg edge)
+  function emptyMsg(w,h,msg){ const maxc=Math.max(24,Math.floor((w-70)/7));
+    const words=msg.split(' '), lines=[]; let cur='';
+    for(const wd of words){ if(cur && (cur+' '+wd).length>maxc){ lines.push(cur); cur=wd; } else cur=cur?cur+' '+wd:wd; }
+    if(cur) lines.push(cur);
+    const t=svg.append('text').attr('text-anchor','middle').attr('fill','#999').attr('font-size',13);
+    lines.forEach((ln,i)=>t.append('tspan').attr('x',w/2).attr('y',h/2+(i-(lines.length-1)/2)*19).text(ln)); }
   function axisFmt(key){ const m=MByKey[key]; return v=> m.fmt==='pct'? v+'%' : v; }
 
   function renderScatter(){
@@ -536,8 +549,7 @@
     $('plotSub').textContent=`${drawn.length} schools · size = ${sizeLabelFor(yk)} · dashed = mean of school rates`
       +(state.dropOut&&A.dropped?` · ${A.dropped} outlier${A.dropped>1?'s':''} hidden`:'')
       +(gradNote(xk,yk)?` · ${gradNote(xk,yk)}`:'');
-    if(!drawn.length){ svg.append('text').attr('x',w/2).attr('y',h/2).attr('text-anchor','middle').attr('fill','#999')
-      .text((MByKey[xk].grad||MByKey[yk].grad)?'No mature graduation cohorts in this selection — 6-yr rates exist through entry 2019, 4-yr through 2021 (try the 2016–2019 preset).':'No schools with both metrics in this selection.'); return; }
+    if(!drawn.length){ emptyMsg(w,h,(MByKey[xk].grad||MByKey[yk].grad)?'No mature graduation cohorts in this selection — 6-yr rates exist through entry 2019, 4-yr through 2021 (try the 2016–2019 preset).':'No schools with both metrics in this selection.'); return; }
     // dot size encodes the active denominator (yk's denominator); reserve max radius so dots stay in-frame
     const bvals=drawn.map(d=>sizeBasis(d.s,yk)), bmin=d3.min(bvals), bmax=d3.max(bvals)||1;
     const r=d3.scaleSqrt().domain([bmin===bmax?0:bmin,bmax]).range([3,20]); const RMAX=22;
@@ -587,8 +599,7 @@
     $('plotSub').textContent=`${drawn.length} schools · size = ${sizeLabelFor(mk)} · each dot is one high school`
       +(state.dropOut&&A.dropped?` · ${A.dropped} outlier${A.dropped>1?'s':''} hidden`:'')
       +(gradNote(mk)?` · ${gradNote(mk)}`:'');
-    if(!drawn.length){ svg.append('text').attr('x',w/2).attr('y',h/2).attr('text-anchor','middle').attr('fill','#999')
-      .text(MByKey[mk].grad?'No mature graduation cohorts in this selection — 6-yr rates exist through entry 2019, 4-yr through 2021 (try the 2016–2019 preset).':'No schools with this metric in this selection.'); return; }
+    if(!drawn.length){ emptyMsg(w,h,MByKey[mk].grad?'No mature graduation cohorts in this selection — 6-yr rates exist through entry 2019, 4-yr through 2021 (try the 2016–2019 preset).':'No schools with this metric in this selection.'); return; }
     const bvals=drawn.map(d=>sizeBasis(d.s,mk)), bmin=d3.min(bvals), bmax=d3.max(bvals)||1;
     const r=d3.scaleSqrt().domain([bmin===bmax?0:bmin,bmax]).range([3,18]); const RMAX=20;
     const x=d3.scaleLinear().domain(d3.extent(drawn,d=>d.v)).nice().range([m.left+RMAX,w-m.right-RMAX]);
@@ -700,10 +711,16 @@
     if(state.dropOut) L.innerHTML+=`<span class="sz" style="color:#9c3a12"><b>Outliers hidden</b> (Tukey 1.5&times;IQR, per view)</span>`;
   }
 
+  // tooltip value: grad metrics carry their any-campus entrant-cohort N (the rate's true base,
+  // independent of this campus's funnel); funnel rates keep the low-confidence tag.
+  function tipVal(s,k){ const m=MByKey[k]; let h=`<b>${fmtVal(valOf(s,k),k)}</b>`;
+    if(m.grad){ const n=gradN(s.ceeb,m); if(n) h+=` <span class="tl">· any-campus cohort ${fmtN(n)}</span>`; }
+    else if(!reliable(s,k)) h+=' <span class="tl">(low conf.)</span>';
+    return h; }
   function showTip(e,s){ const mk=state.view==='scatter'?state.yMetric:state.stripMetric, xk=state.view==='scatter'?state.xMetric:null;
     tooltip.style.opacity=1; tooltip.style.left=Math.min(window.innerWidth-260,e.clientX+14)+'px'; tooltip.style.top=(e.clientY+14)+'px';
-    let html=`<b>${s.name}</b><br><span class="tl">${s.city||''}</span><br><span class="tl">${MByKey[mk].short}:</span> <b>${fmtVal(valOf(s,mk),mk)}</b>${reliable(s,mk)?'':' <span class="tl">(low conf.)</span>'}<br>`;
-    if(xk) html+=`<span class="tl">${MByKey[xk].short}:</span> <b>${fmtVal(valOf(s,xk),xk)}</b><br>`;
+    let html=`<b>${s.name}</b><br><span class="tl">${s.city||''}</span><br><span class="tl">${MByKey[mk].short}:</span> ${tipVal(s,mk)}<br>`;
+    if(xk) html+=`<span class="tl">${MByKey[xk].short}:</span> ${tipVal(s,xk)}<br>`;
     html+=`<span class="tl">Applicants:</span> ${fmtN(s.apps||0)} · ${s.upp==null?'LCFF+ n/a':(s.lcff?'LCFF+':'non-LCFF+')}`; tooltip.innerHTML=html; }
   function hideTip(){ tooltip.style.opacity=0; }
 
@@ -717,11 +734,23 @@
     return sw?{val:sv/sw,n:sw,y0,y1}:null; }
   function gradTr(lbl,a){ return `<tr><td class="k">${lbl}${a?`<div class="rbasis">cohorts ${a.y0}\u2013${a.y1} \u00b7 ${fmtN(a.n)} entrants</div>`:''}</td><td class="v">${a?a.val.toFixed(1)+'%':'\u2014'}</td></tr>`; }
   function gradRowAll(s,col,lbl){ return gradTr(lbl,gradPoolAll(D.grad[s.ceeb],GRIX[col])); }
+  // the selected period's entrant cohorts (any campus) — the base behind a "this period's entrants"
+  // rate; explains how a school can carry one while its funnel to THIS campus reads 0 or suppressed
+  function gradPeriodRow(s){ const ys=new Set(periodByKey[state.period].years); let sw=0,y0=null,y1=null;
+    for(const r of (D.grad[s.ceeb]||[])){ if(!ys.has(r[0])||!r[1]) continue; sw+=r[1];
+      if(y0==null||r[0]<y0) y0=r[0]; if(y1==null||r[0]>y1) y1=r[0]; }
+    return `<tr><td class="k">UC entrants in selected period <span class="rcap">any campus</span>`+
+      `${sw?`<div class="rbasis">cohorts ${y0}${y1!==y0?'\u2013'+y1:''} \u00b7 reported only when \u226510 entrants</div>`:''}</td>`+
+      `<td class="v">${sw?fmtN(sw):'\u2014'}</td></tr>`; }
   function gradRowCam(s,col,lbl){ return gradTr(lbl,gradPoolAll(D.gradC[state.campus+'|'+s.ceeb],GRIX[col])); }
   function renderProfile(s){
     const p=$('profile');
     const row=(k,lbl)=>`<tr><td class="k">${lbl||MByKey[k].label}</td><td class="v">${fmtVal(valOf(s,k),k)}</td></tr>`;
     const cnt=idx=>{ const v=sumIdx(s.rows,idx); return v==null?'—':fmtN(v); };
+    // funnel counts: sum the OBSERVED years only; if UC suppressed the cell in every year of the
+    // period, show an em-dash (suppressed, possibly nonzero) instead of a misleading 0.
+    const fcnt=idx=>{ const v=sumIdx(s.rows,idx);
+      return v==null?'<span title="Suppressed by UC in every year of the period — blank \u2260 0; the true count may be small but nonzero.">\u2014</span>':fmtN(v); };
     const _ag=valOf(s,'app_gpa'), _dg=valOf(s,'adm_gpa'), _eg=meanIdx(s.rows,IX.egpa);
     const gapTxt=(_ag!=null&&_dg!=null)?((_dg-_ag>=0?'+':'')+(_dg-_ag).toFixed(2)):'—';
     const egTxt=(_eg==null?'—':_eg.toFixed(2));
@@ -739,10 +768,10 @@
       `<div class="ploc">${s.city||''}${s.county?', '+s.county+' County':''} · ${D.campuses[state.campus]} · ${periodLabel()} `+
       `<span class="badge ${s.upp==null?'na':(s.lcff?'lcff':'non')}">${s.upp==null?'LCFF+ n/a':(s.lcff?'LCFF+':'non-LCFF+')}</span></div>`+
       `<table class="ptable">`+
-      `<tr class="sec"><td>Funnel to this campus (summed over period)</td><td class="v"></td></tr>`+
-      `<tr><td class="k">Applicants</td><td class="v">${fmtN(d3.sum(s.rows,r=>r[IX.A]||0))}</td></tr>`+
-      `<tr><td class="k">Admits</td><td class="v">${fmtN(d3.sum(s.rows,r=>r[IX.D]||0))}</td></tr>`+
-      `<tr><td class="k">Enrollees</td><td class="v">${fmtN(d3.sum(s.rows,r=>r[IX.E]||0))}</td></tr>`+
+      `<tr class="sec"><td>Funnel to this campus (summed over period) <span class="rcap">\u2014 = suppressed by UC in every year shown (blank \u2260 0)</span></td><td class="v"></td></tr>`+
+      `<tr><td class="k">Applicants</td><td class="v">${fcnt(IX.A)}</td></tr>`+
+      `<tr><td class="k">Admits</td><td class="v">${fcnt(IX.D)}</td></tr>`+
+      `<tr><td class="k">Enrollees</td><td class="v">${fcnt(IX.E)}</td></tr>`+
       `<tr class="sec"><td>Base counts <span class="rcap">the denominators behind the rates below</span></td><td class="v"></td></tr>`+
       `<tr><td class="k">A–G eligible <span class="rcap">(per-eligible base)</span></td><td class="v">${cnt(IX.Gp)}</td></tr>`+
       `<tr><td class="k">Grade 9–12 enrollment <span class="rcap">(per-head base)</span></td><td class="v">${cnt(IX.H)}</td></tr>`+
@@ -753,7 +782,8 @@
       row('app_gpa','Applicant GPA')+row('adm_gpa','Admit GPA')+
       `<tr><td class="k">Enrollee GPA</td><td class="v">${egTxt}</td></tr>`+
       `<tr><td class="k">Admit − applicant gap <span class="rcap">how far UC reached vs the pool</span></td><td class="v">${gapTxt}</td></tr>`+
-      `<tr class="sec"><td>Graduation at UC <span class="rcap">this school's UC freshman entrants \u00b7 all campuses pooled</span></td><td class="v"></td></tr>`+
+      `<tr class="sec"><td>Graduation at UC <span class="rcap">this school's UC freshman entrants \u00b7 ANY campus, pooled \u2014 a different base than the funnel above</span></td><td class="v"></td></tr>`+
+      gradPeriodRow(s)+
       gradRowAll(s,'g6','6-yr graduation')+gradRowAll(s,'g4','4-yr graduation')+gradRowAll(s,'r1','1st-year retention')+
       gradRowCam(s,'g6','6-yr graduation \u2014 entrants to '+D.campuses[state.campus]+' only')+
       `<tr class="sec"><td>Academic / context</td><td class="v"></td></tr>`+
