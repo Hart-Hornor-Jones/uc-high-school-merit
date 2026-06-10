@@ -291,12 +291,15 @@
           entrants (e.g. vs CAASPP: does school-level merit predict success after enrollment?). The
           same-period rates are also offered on the X-axis: though measured after admission, a cohort's
           eventual completion can be read as an indicator of merit already present when it applied.
-          <b>Scope:</b> all grad metrics pool the school's entrants to <i>any</i> UC campus (the
-          per-campus dashboard series exists only for big feeders), so on a campus view a school can
-          carry a retention/graduation rate even when its admits or enrollees <i>to that campus</i> are
-          zero or suppressed &mdash; the grad rate describes the school's UC-going students; the funnel
-          describes this campus. Profiles show the any-campus entrant count behind the rate, and funnel
-          counts suppressed in every year display as &ldquo;&mdash;&rdquo; rather than a false 0. Dot size for
+          <b>Scope.</b> The two roles use different series. As <i>X-axis indicators</i>, grad metrics
+          pool the school's entrants to <i>any</i> UC campus (richest coverage; a school-level trait), so a
+          school can carry one even when its admits or enrollees to the selected campus are zero or
+          suppressed. As <i>Y-axis outcomes</i>, retention/graduation are <b>campus-specific</b> &mdash;
+          entrants to the selected campus only &mdash; since an outcome of this campus's admissions should
+          use this campus's students. The per-campus dashboard series reports a school-year only when
+          &ge;10 students entered that campus, so campus-specific outcomes show far fewer (and larger)
+          schools. Profiles show both blocks with their entrant counts, and funnel counts suppressed in
+          every year display as &ldquo;&mdash;&rdquo; rather than a false 0. Dot size for
           grad metrics is the entrant-cohort N. Campus filter does not change the All-UC grad series; a
           profile additionally shows the campus-specific 6-yr rate where reported.</li>
       </ul>
@@ -353,7 +356,9 @@
   // ---------- UC graduation rates by source high school (UC Info Center) ----------
   // D.grad[ceeb] (all campuses pooled) and D.gradC["ci|ceeb"] rows: [entry_year, N, ret1, g4, g5, g6]
   // (integer percents; a cohort is shown only when the school sent >=10 entrants that fall).
-  // A grad metric carries m.grad={col,win}; its value is the N-WEIGHTED mean over an entry-year window:
+  // A grad metric carries m.grad={col,win[,src]}; src 'campus' pools the per-campus series (entrants
+  // to the SELECTED campus only — Y-axis outcomes), otherwise the all-UC series (X-axis indicators).
+  // Its value is the N-WEIGHTED mean over an entry-year window:
   //   win 'same'  -> the selected period's years (the cohorts admitted then; mature cols only)
   //   win 'prior' -> the 5 cohorts entering 6-10 years before the period starts — the most recent
   //                  6-yr rates fully observable (and knowable to admissions readers) by decision time.
@@ -362,7 +367,8 @@
     if(win==='same') return refYear!=null?[refYear]:periodByKey[state.period].years;
     const y0=refYear!=null?refYear:Math.min(...periodByKey[state.period].years);
     const a=[]; for(let y=y0-10;y<=y0-6;y++) a.push(y); return a; }
-  function gradAgg(ceeb,m,years){ const rows=ceeb&&D.grad[ceeb]; if(!rows) return null;
+  function gradAgg(ceeb,m,years){
+    const rows=ceeb&&(m.grad.src==='campus'?D.gradC[state.campus+'|'+ceeb]:D.grad[ceeb]); if(!rows) return null;
     const ys=new Set(years), ci=GRIX[m.grad.col]; let sv=0,sw=0;
     for(const r of rows){ if(ys.has(r[0])&&r[ci]!=null&&r[1]){ sv+=r[ci]*r[1]; sw+=r[1]; } }
     return sw?{val:sv/sw,n:sw}:null; }
@@ -371,7 +377,8 @@
   // window note for titles ("UC grad cohorts: entered 2013–2017")
   function gradNote(){ for(const k of arguments){ const m=MByKey[k];
     if(m&&m.grad){ const ys=gradWinYears(m.grad.win);
-      return 'UC grad cohorts: entered '+Math.min(...ys)+'\u2013'+Math.max(...ys)+' (entrants to any UC campus)'; } } return null; }
+      return 'UC grad cohorts: entered '+Math.min(...ys)+'\u2013'+Math.max(...ys)
+        +(m.grad.src==='campus'?' (entrants to '+D.campuses[state.campus]+' only)':' (entrants to any UC campus)'); } } return null; }
 
   function valOf(school, key){
     const m=MByKey[key], rows=school.rows;
@@ -421,7 +428,8 @@
   function sizeBasis(school,key){ const m=MByKey[key];
     if(m&&m.grad){ const n=gradN(school.ceeb,m); if(n) return n; }
     const d=denomCount(school,key); return (d!=null&&d>0)?d:(school.apps||0); }
-  function sizeLabelFor(key){ const m=MByKey[key]; if(m&&m.grad) return 'UC entrant cohort';
+  function sizeLabelFor(key){ const m=MByKey[key];
+    if(m&&m.grad) return m.grad.src==='campus'?'entrants to this campus':'UC entrant cohort (any campus)';
     return (m&&m.den)?(DENLBL[m.den]||'applicants'):'applicants'; }
 
   // arithmetic mean of per-school values = central tendency of the dots (what each dot measures)
@@ -714,7 +722,8 @@
   // tooltip value: grad metrics carry their any-campus entrant-cohort N (the rate's true base,
   // independent of this campus's funnel); funnel rates keep the low-confidence tag.
   function tipVal(s,k){ const m=MByKey[k]; let h=`<b>${fmtVal(valOf(s,k),k)}</b>`;
-    if(m.grad){ const n=gradN(s.ceeb,m); if(n) h+=` <span class="tl">· any-campus cohort ${fmtN(n)}</span>`; }
+    if(m.grad){ const n=gradN(s.ceeb,m);
+      if(n) h+=` <span class="tl">· ${m.grad.src==='campus'?'this-campus':'any-campus'} cohort ${fmtN(n)}</span>`; }
     else if(!reliable(s,k)) h+=' <span class="tl">(low conf.)</span>';
     return h; }
   function showTip(e,s){ const mk=state.view==='scatter'?state.yMetric:state.stripMetric, xk=state.view==='scatter'?state.xMetric:null;
@@ -786,6 +795,8 @@
       gradPeriodRow(s)+
       gradRowAll(s,'g6','6-yr graduation')+gradRowAll(s,'g4','4-yr graduation')+gradRowAll(s,'r1','1st-year retention')+
       gradRowCam(s,'g6','6-yr graduation \u2014 entrants to '+D.campuses[state.campus]+' only')+
+      gradRowCam(s,'g4','4-yr graduation \u2014 entrants to '+D.campuses[state.campus]+' only')+
+      gradRowCam(s,'r1','1st-year retention \u2014 entrants to '+D.campuses[state.campus]+' only')+
       `<tr class="sec"><td>Academic / context</td><td class="v"></td></tr>`+
       row('avg')+row('ela')+row('math')+rateRow(s,'ag')+row('upp')+
       `<tr><td class="k">ELWR met at entry — no remediation (enrollees)<div class="rbasis">met via AWPE exam or AP/IB/SAT/ACT/transferable course; not “ever met”</div></td><td class="v">${awpeVal}</td></tr>`+
@@ -798,8 +809,9 @@
     const yk=state.view==='scatter'?state.yMetric:state.stripMetric;
     const mG=MByKey[yk].grad; let pts, note='';
     if(mG){ const ci=GRIX[mG.col];
-      pts=(D.grad[s.ceeb]||[]).filter(r=>r[ci]!=null&&r[1]).map(r=>[r[0],r[ci]]);
-      note='By fall entry cohort \u00b7 All-UC entrants from this school (cohorts of \u226510).';
+      const rowsG=(mG.src==='campus'?D.gradC[state.campus+'|'+s.ceeb]:D.grad[s.ceeb])||[];
+      pts=rowsG.filter(r=>r[ci]!=null&&r[1]).map(r=>[r[0],r[ci]]);
+      note='By fall entry cohort \u00b7 '+(mG.src==='campus'?'entrants to '+D.campuses[state.campus]+' only':'All-UC entrants from this school')+' (cohorts of \u226510).';
     } else {
       const key=state.campus+'|'+s.ceeb, full=(D.panel[key]||[]);
       pts=full.map(r=>{ const v=valOf({rows:[r],awpe:s.awpe},yk); return v==null?null:[r[IX.year],v]; }).filter(Boolean);
