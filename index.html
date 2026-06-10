@@ -288,7 +288,9 @@
           something fixed about a school's students, it is a merit proxy; if readers calibrate on prior
           graduates, it is the very signal they act on. The over-time panel shows the correlation re-anchored
           year by year. (2)&nbsp;as an <i>outcome</i> &mdash; the retention/graduation rates of the period's own
-          entrants (e.g. vs CAASPP: does school-level merit predict success after enrollment?). Dot size for
+          entrants (e.g. vs CAASPP: does school-level merit predict success after enrollment?). The
+          same-period rates are also offered on the X-axis: though measured after admission, a cohort's
+          eventual completion can be read as an indicator of merit already present when it applied. Dot size for
           grad metrics is the entrant-cohort N. Campus filter does not change the All-UC grad series; a
           profile additionally shows the campus-specific 6-yr rate where reported.</li>
       </ul>
@@ -311,7 +313,9 @@
   // panel row layout: [year,A,D,E,C,Gc,H,ela,math,upp,Gp,agpa,dgpa,egpa]
   const IX = {year:0,A:1,D:2,E:3,C:4,G:5,H:6,ela:7,math:8,upp:9,Gp:10,agpa:11,dgpa:12,egpa:13};
   const METRICS = D.metrics, MByKey = Object.fromEntries(METRICS.map(m=>[m.key,m]));
-  const X_KEYS = METRICS.filter(m=>m.role==='merit'||m.role==='context').map(m=>m.key);
+  // X axis offers merit/context metrics plus outcome metrics flagged xaxis (the same-period UC
+  // retention/graduation rates: later outcomes read as indicators of merit present at application).
+  const X_KEYS = METRICS.filter(m=>m.role==='merit'||m.role==='context'||m.xaxis).map(m=>m.key);
   const Y_KEYS = METRICS.filter(m=>m.role==='outcome').map(m=>m.key);
   const ALL_KEYS = METRICS.map(m=>m.key);
   const periodByKey = Object.fromEntries(D.periods.map(p=>[p.key,p]));
